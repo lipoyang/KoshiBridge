@@ -1,0 +1,2 @@
+# KoshiBridge
+Koshian/KonashiのUARTをBLEからWiFiに中継するAndroidアプリ
