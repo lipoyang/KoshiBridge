@@ -1,7 +1,11 @@
 package net.lipoyang.koshibridge;
 
+import android.Manifest;
+import android.annotation.TargetApi;
+import android.app.Activity;
 import android.bluetooth.BluetoothGattCharacteristic;
-import android.support.v7.app.ActionBarActivity;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -16,6 +20,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.ServerSocket;
@@ -27,12 +32,11 @@ import java.util.Enumeration;
 import com.uxxu.konashi.lib.Konashi;
 import com.uxxu.konashi.lib.KonashiListener;
 import com.uxxu.konashi.lib.KonashiManager;
-import org.apache.http.conn.util.InetAddressUtils;
 import org.jdeferred.DoneCallback;
 import org.jdeferred.FailCallback;
 import info.izumin.android.bletia.BletiaException;
 
-public class KoshiServerUI extends ActionBarActivity implements Runnable, View.OnClickListener {
+public class KoshiServerUI extends Activity implements Runnable, View.OnClickListener {
 
     // Konashi
     private KonashiManager mKonashiManager;
@@ -121,6 +125,11 @@ public class KoshiServerUI extends ActionBarActivity implements Runnable, View.O
             runner = new Thread(this);
         //}
         runner.start();
+
+        // Permittion
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            requestLocationPermission();
+        }
     }
     @Override
     public synchronized void onPause() {
@@ -238,6 +247,10 @@ public class KoshiServerUI extends ActionBarActivity implements Runnable, View.O
         public void onUpdateBatteryLevel(KonashiManager manager, int level) {
 
         }
+        @Override
+        public void onUpdateSpiMiso(KonashiManager manager, byte[] data){
+
+        }
     };
 
     // This is just a last resort. Versiion 2 SDK has no onCancelKonashi
@@ -324,8 +337,7 @@ public class KoshiServerUI extends ActionBarActivity implements Runnable, View.O
                 for (Enumeration<InetAddress> ipAddressEnum = networkInterface.getInetAddresses(); ipAddressEnum.hasMoreElements();){
                     InetAddress inetAddress = (InetAddress) ipAddressEnum.nextElement();
                     //---check that it is not a loopback address and it is ipv4---
-                    if(!inetAddress.isLoopbackAddress() &&
-                        InetAddressUtils.isIPv4Address(inetAddress.getHostAddress())){
+                    if(!inetAddress.isLoopbackAddress() && (inetAddress instanceof Inet4Address)){
                         if(ipCnt == 0){
                             ip[0] = inetAddress.getHostAddress();
                             ipCnt++;
@@ -472,6 +484,29 @@ public class KoshiServerUI extends ActionBarActivity implements Runnable, View.O
                     ;
                 }
             }
+        }
+    }
+
+    // permission request
+
+    private static final int REQ_CODE_ALLOW_BLUETOOTH = 100;
+
+    @TargetApi(Build.VERSION_CODES.M)
+    private void requestLocationPermission() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_CODE_ALLOW_BLUETOOTH);
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.M)
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == REQ_CODE_ALLOW_BLUETOOTH) {
+            if (grantResults.length > 0 && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                finish();
+            }
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 }
