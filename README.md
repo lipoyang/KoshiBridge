@@ -20,8 +20,9 @@ Koshian/KonashiのUARTをBLEからWiFiに中継するAndroidアプリ
 
 ## スクリーンショット
 ### KoshiBridgeサーバアプリ
+![スクリーンショット](image/screenshot_android.png)
 ### KoshiBridgeクライアントUI
-
+![スクリーンショット](image/screenshot_windows.png)
 ## KoshiBridgeクラスのAPI
 |メソッド|説明|
 |:--|:--|
