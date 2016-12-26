@@ -11,24 +11,6 @@ using System.Threading;
 
 namespace KoshiBridge
 {
-#if false
-    /// <summary>
-    /// デバイス接続通知
-    /// </summary>
-    public delegate void OnConnect();
-
-    /// <summary>
-    /// デバイス切断通知
-    /// </summary>
-    public delegate void OnDisconnect();
-
-    /// <summary>
-    /// UART受信通知
-    /// </summary>
-    /// <param name="data"></param>
-    public delegate void OnUpdateUartRx(string data);
-#endif
-    
     public class KoshiEventArgs : EventArgs
     {
         public string data;
@@ -40,11 +22,6 @@ namespace KoshiBridge
     /// </summary>
     public class KoshiClient
     {
-#if false
-        private OnConnect onConnect = null;
-        private OnDisconnect onDisconnect = null;
-        private OnUpdateUartRx onUpdateUartRx = null;
-#else
         /// <summary>
         /// デバイス接続時イベント
         /// </summary>
@@ -57,7 +34,12 @@ namespace KoshiBridge
         /// UART受信時イベント
         /// </summary>
         public event KoshiEventHandler onUpdateUartRx;
-#endif
+        /// <summary>
+        /// ネットワーク切断時イベント
+        /// </summary>
+        public event KoshiEventHandler onClosed;
+
+
         TcpClient tcpClient;
         NetworkStream stream;
         StreamWriter writer;
@@ -65,6 +47,7 @@ namespace KoshiBridge
         //Encoding encoder;
         Thread recvTread;
         bool toQuit = false;
+        bool isOpen = false;
         string deviceName = "";
 
         /// <summary>
@@ -96,23 +79,25 @@ namespace KoshiBridge
                 //読み書きのタイムアウトを3秒にする
                 stream.ReadTimeout = 3000;
                 stream.WriteTimeout = 3000;
-
-                // 受信スレッドを生成
-                recvTread = new Thread(new ThreadStart(recvThreadFunc));
-                recvTread.Start();
-
-                // "open"を送信
-                string message = "open";
-                writer.WriteLine(message);
-                writer.Flush();
-
-                return true;
             }
             catch
             {
+                if (stream != null) stream.Close();
+                if(tcpClient!=null) tcpClient.Close();
                 return false;
             }
+            // 受信スレッドを生成
+            recvTread = new Thread(new ThreadStart(recvThreadFunc));
+            recvTread.Start();
 
+            isOpen = true;
+
+            // "open"を送信
+            string message = "open";
+            writer.WriteLine(message);
+            writer.Flush();
+
+            return true;
         }
         /// <summary>
         /// KoshiBridgeサーバとの通信を開く
@@ -130,6 +115,8 @@ namespace KoshiBridge
         /// <returns>成否</returns>
         public bool close()
         {
+            isOpen = false;
+
             // 受信スレッドの終了
             toQuit = true;
             recvTread.Join();
@@ -140,23 +127,6 @@ namespace KoshiBridge
             return true;
         }
 
-#if false
-        /// <summary>
-        /// KoshiBridgeサーバに接続しているデバイス情報を取得する
-        /// </summary>
-        /// <returns>デバイス名</returns>
-        public string getPeripheralName()
-        {
-            string message = "getPeripheralName";
-
-            writer.WriteLine(message);
-            writer.Flush();
-
-            // TODO
-            return "";
-        }
-#endif
-
         /// <summary>
         /// UARTでデータを送信する
         /// </summary>
@@ -164,6 +134,8 @@ namespace KoshiBridge
         /// <returns>成否</returns>
         public bool uartWrite(string data)
         {
+            if (!isOpen) return false;
+
             string message = "uartWrite " + data;
 
             writer.WriteLine(message);
@@ -179,6 +151,8 @@ namespace KoshiBridge
         /// <returns></returns>
         public bool uartBaudrate(int baudrate)
         {
+            if (!isOpen) return false;
+
             string message = "uartBaudrate " + baudrate.ToString();
 
             writer.WriteLine(message);
@@ -187,57 +161,39 @@ namespace KoshiBridge
             return true;
         }
 
-#if false
-        /// <summary>
-        /// デバイス接続通知コールバックの登録
-        /// </summary>
-        /// <param name="callback">コールバック関数</param>
-        public void setOnCennect(OnConnect callback)
-        {
-            onConnect = callback;
-        }
-
-        /// <summary>
-        /// デバイス切断通知コールバックの登録
-        /// </summary>
-        /// <param name="callback">コールバック関数</param>
-        public void setOnDisconnect(OnDisconnect callback)
-        {
-            onDisconnect = callback;
-        }
-
-        /// <summary>
-        /// UART受信通知コールバックの登録
-        /// </summary>
-        /// <param name="callback">コールバック関数</param>
-        public void setOnUpdateUartRx(OnUpdateUartRx callback)
-        {
-            onUpdateUartRx = callback;
-        }
-#endif
         // 受信スレッド関数
         private void recvThreadFunc()
         {
             while(!toQuit)
             {
-                if (stream.DataAvailable)
-                {
+                //if (stream.DataAvailable)
+                //{
                     try
                     {
                         //サーバーから送られたデータを受信する
                         string data = reader.ReadLine();
+                        if (data == null)
+                        {
+                            isOpen = false;
+
+                            stream.Close();
+                            tcpClient.Close();
+                            KoshiEventArgs args = new KoshiEventArgs();
+                            onClosed(this, args);
+                            break;
+                        }
                         // 受信した文字列の処理
                         executeRecvData(data);
                     }
-                    catch (TimeoutException ex)
+                    catch (IOException ex)// TimeoutException ex)
                     {
                         ; // タイムアウト
                     }
-                }
-                else
-                {
-                    Thread.Sleep(1);
-                }
+                //}
+                //else
+                //{
+                //    Thread.Sleep(1);
+                //}
             }
         }
 
@@ -245,40 +201,28 @@ namespace KoshiBridge
         private void executeRecvData(string data)
         {
             // デバイス接続通知
-            if (data.StartsWith("onCennect "))
+            if (data.StartsWith("onConnect "))
             {
                 deviceName = data.Substring(10);
-
-                //if (onConnect != null)
-                {
-                    KoshiEventArgs args = new KoshiEventArgs();
-                    args.data = deviceName;
-                    onConnect(this, args);
-                    // onConnect();
-                }
+                
+                KoshiEventArgs args = new KoshiEventArgs();
+                args.data = deviceName;
+                onConnect(this, args);
             }
             // デバイス切断通知
             else if(data.StartsWith("onDisconnect"))
             {
-                //if (onDisconnect != null)
-                {
-                    KoshiEventArgs args = new KoshiEventArgs();
-                    onDisconnect(this, args);
-                    //onDisconnect();
-                }
+                KoshiEventArgs args = new KoshiEventArgs();
+                onDisconnect(this, args);
             }
             // UART受信通知
             else if (data.StartsWith("onUpdateUartRx "))
             {
-                //if (onUpdateUartRx != null)
-                {
-                    string param = data.Substring(15);
-
-                    KoshiEventArgs args = new KoshiEventArgs();
-                    args.data = param;
-                    onUpdateUartRx(this, args);
-                    // onUpdateUartRx(param);
-                }
+                string param = data.Substring(15);
+                
+                KoshiEventArgs args = new KoshiEventArgs();
+                args.data = param;
+                onUpdateUartRx(this, args);
             }
         }
     }

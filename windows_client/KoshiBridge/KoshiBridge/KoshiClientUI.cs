@@ -15,6 +15,40 @@ namespace KoshiBridge
         KoshiClient koshiClient = null;
         bool isOpen = false;
 
+        /// <summary>
+        /// IPアドレス
+        /// </summary>
+        [Browsable(true)]
+        public string IpAddress
+        {
+            get
+            {
+                return textIpAddr.Text;
+            }
+            set
+            {
+                textIpAddr.Text = value;
+            }
+        }
+
+        /// <summary>
+        /// ポート番号
+        /// </summary>
+        [Browsable(true)]
+        public int PortNumber
+        {
+            get
+            {
+                int val = 0;
+                int.TryParse(textPort.Text, out val);
+                return val;
+            }
+            set
+            {
+                textPort.Text = value.ToString();
+            }
+        }
+
         public KoshiClientUI()
         {
             InitializeComponent();
@@ -28,16 +62,13 @@ namespace KoshiBridge
         {
             koshiClient = client;
 
-#if false
-            client.setOnCennect(onConnect);
-            client.setOnDisconnect(onDisconnect);
-#else
             client.onConnect += onConnect;
             client.onDisconnect += onDisconnect;
-#endif
+            client.onClosed += onClosed;
         }
 
-        private void buttonOpen_Click(object sender, EventArgs e)
+        private bool isConnecting = false;
+        private async void buttonOpen_Click(object sender, EventArgs e)
         {
             if (koshiClient == null) return;
 
@@ -46,6 +77,8 @@ namespace KoshiBridge
             {
                 koshiClient.close();
 
+                isOpen = false;
+
                 buttonOpen.Text = "開く";
                 textStatus.Text = "未接続";
 
@@ -53,33 +86,62 @@ namespace KoshiBridge
             // 閉じていたら開く
             else
             {
+                if (isConnecting) return;
+                isConnecting = true;
+
                 string ipAddr = textIpAddr.Text;
                 int port = 0;
                 if (!int.TryParse(textPort.Text, out port))
                 {
                     MessageBox.Show("ポート番号が無効です");
                 }
-                if (koshiClient.open(ipAddr, port))
+
+                bool ret = false;
+                await Task.Run(() =>
                 {
+                    ret = koshiClient.open(ipAddr, port);
+                });
+
+                if (ret)
+                {
+                    isOpen = true;
+
                     buttonOpen.Text = "閉じる";
                     textStatus.Text = "未接続";
                 }
+                else
+                {
+                    MessageBox.Show("サーバに接続できません");
+                }
+                isConnecting = false;
             }
         }
 
         // デバイス接続通知ハンドラ
         private void onConnect(object sender, KoshiEventArgs e)
         {
-            // TODO
-            string deviceName = e.data;
-            textStatus.Text = "接続中: " + deviceName;
+            this.BeginInvoke((Action)(() => {
+                string deviceName = e.data;
+                textStatus.Text = "接続中: " + deviceName;
+            }));
         }
 
         // デバイス切断通知ハンドラ
         private void onDisconnect(object sender, KoshiEventArgs e)
         {
-            // TODO
-            textStatus.Text = "未接続";
+            this.BeginInvoke((Action)(() => {
+                textStatus.Text = "未接続";
+            }));
+        }
+
+        // ネットワーク切断ハンドラ
+        private void onClosed(object sender, KoshiEventArgs e)
+        {
+            this.BeginInvoke((Action)(() => {
+                isOpen = false;
+                buttonOpen.Text = "開く";
+                textStatus.Text = "未接続";
+            }));
         }
     }
 }

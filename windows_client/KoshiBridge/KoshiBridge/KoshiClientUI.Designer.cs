@@ -52,7 +52,7 @@
             this.textPort.Name = "textPort";
             this.textPort.Size = new System.Drawing.Size(54, 23);
             this.textPort.TabIndex = 1;
-            this.textPort.Text = "12345";
+            this.textPort.Text = "5678";
             // 
             // label1
             // 
